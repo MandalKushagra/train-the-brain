@@ -1,0 +1,171 @@
+// FTG Module - Sanitized Code Summary (Kotlin/Android)
+// All production URLs, tokens, and PII removed
+
+// === ENUMS ===
+enum class ScreenState { PACKAGING_OPTIONS, PRODUCT_IDENTIFIERS, DIMENSION_WEIGHT }
+enum class PackagingOption { SIOB, SIOCB, REPACKAGED }
+enum class DimensionMode { VMEASURE, MANUAL }
+
+// === CONSTANTS ===
+val MAX_LENGTH_CM = 999.0
+val MAX_WIDTH_CM = 999.0
+val MAX_HEIGHT_CM = 999.0
+val MAX_WEIGHT_KG = 2000.0
+val MAX_ITEMS_PER_BOX = 10000L
+
+// === SKU SEARCH SCREEN (FtgFragmentCaptureDimension) ===
+// Input field: ftg_diamention_capture_input_field
+// RecyclerView: ftg_diamention_capture_recycler_view
+// Input field disabled until client templates loaded
+// TextWatcher with 500ms debounce triggers autocomplete API
+// Barcode scanning: ScannableIdParser.getSkuWithMultipleTemplates() parses barcode to SKU
+// On product card click: navigates to FtgFragmentMain with product details bundle
+
+// === MAIN FRAGMENT (FtgFragmentMain) - 3 Screen States ===
+
+// -- Screen 1: PACKAGING_OPTIONS --
+// Views: option_siob, option_siocb, option_repackaged (LinearLayout cards)
+// layout_items_per_box: shown only when SIOCB selected
+// et_items_per_box: integer input, min 2, max 10000
+// btn_next: disabled until option selected (and items_per_box valid if SIOCB)
+
+fun selectPackagingOption(option: PackagingOption) {
+    selectedPackagingOption = option
+    resetOptionSelections()
+    when (option) {
+        SIOB -> { layoutItemsPerBox.visibility = GONE }
+        SIOCB -> { layoutItemsPerBox.visibility = VISIBLE; etItemsPerBox.requestFocus() }
+        REPACKAGED -> { layoutItemsPerBox.visibility = GONE }
+    }
+    validatePackagingOptionsFields()
+}
+
+fun validatePackagingOptionsFields(): Boolean {
+    if (selectedPackagingOption == null) return false
+    if (selectedPackagingOption == SIOCB) {
+        val itemsPerBox = etItemsPerBox.text.toLongOrNull() ?: 0
+        return itemsPerBox > 1 && itemsPerBox <= MAX_ITEMS_PER_BOX
+    }
+    return true
+}
+
+fun onNextFromPackagingOptions() {
+    if (!validatePackagingOptionsFields()) { showError(); return }
+    // Set siobFlag/siocFlag based on selection
+    showProductIdentifiersScreen()
+}
+
+// -- Screen 2: PRODUCT_IDENTIFIERS --
+// Views: spinner_product_category, et_scannable_id, tv_image_url_value
+// btn_next_identifiers: disabled until mandatory fields valid
+
+fun validateProductIdentifiersFields(): Boolean {
+    val ipcValid = if (shouldCaptureIPC) !internalProdCat.isNullOrEmpty() else true
+    val imageUrl = tvImageUrlValue.text.trim()
+    val imageUrlValid = if (imageUrl.isNotEmpty()) {
+        imageUrl.startsWith("http://") || imageUrl.startsWith("https://")
+    } else true
+    return ipcValid && imageUrlValid
+}
+
+fun onNextFromProductIdentifiers() {
+    if (!validateProductIdentifiersFields()) { showError(); return }
+    showDimensionWeightScreen()
+}
+
+// -- Screen 3: DIMENSION_WEIGHT --
+// Tabs: tab_vmeasure, tab_manual
+// V-Measure content: layout_vmeasure_content, iv_barcode, tv_barcode_text
+// Manual content: layout_manual_content, et_length, et_breadth, et_height, et_weight
+// btn_save_dimensions, btn_recapture_dimensions
+
+fun switchToVMeasureMode() {
+    currentDimensionMode = VMEASURE
+    layoutVMeasureContent.visibility = VISIBLE
+    layoutManualContent.visibility = GONE
+    generateAndDisplayBarcode()
+    if (hasVMeasureData) {
+        showCalculatedLayout()
+        btnRecaptureDimensions.visibility = VISIBLE
+    } else {
+        showWaitMessage()
+        startVmDimensionPolling()
+    }
+}
+
+fun switchToManualMode() {
+    if (!hasManualModePermission) {
+        showError("You do not have permission to use Manual mode")
+        return
+    }
+    stopVmDimensionPolling()
+    currentDimensionMode = MANUAL
+    layoutManualContent.visibility = VISIBLE
+    layoutVMeasureContent.visibility = GONE
+}
+
+fun generateAndDisplayBarcode() {
+    val barcodeValue = if (selectedPackagingOption == SIOCB) {
+        "DLVSKU$dlvSku-$itemsPerBox"
+    } else {
+        "DLVSKU$dlvSku"
+    }
+    ivBarcode.setImageBitmap(createBarcodeBitmap(barcodeValue))
+    tvBarcodeText.text = barcodeValue
+}
+
+fun startVmDimensionPolling() {
+    // Polls API every 2 seconds for V-Measure dimension data
+    vmDimensionPollingHandler.postDelayed(runnable, 2000)
+}
+
+fun validateDimensionFields(): Boolean {
+    if (currentDimensionMode == VMEASURE) {
+        return length > 0 && breadth > 0 && height > 0 && weight > 0
+    } else {
+        // Manual mode: check inputs within limits
+        return length in 0.01..MAX_LENGTH_CM &&
+               breadth in 0.01..MAX_WIDTH_CM &&
+               height in 0.01..MAX_HEIGHT_CM &&
+               weight in 0.001..MAX_WEIGHT_KG
+    }
+}
+
+fun onSaveDimensions() {
+    if (!validateDimensionFields()) { showError(); return }
+    if (currentDimensionMode == MANUAL) {
+        // Upper limit validation for manual mode
+        if (length > MAX_LENGTH_CM) showError("Length cannot exceed 999 cm")
+        if (weight > MAX_WEIGHT_KG) showError("Weight cannot exceed 2000 kg")
+    }
+    updateProductDetails()  // API call to save
+    showSuccess()
+    navigateBackToSkuSearch()
+}
+
+// === CLICK HANDLER ===
+override fun onClick(v: View?) {
+    when (v?.id) {
+        toolbar_imageView_back -> navigateToPreviousScreen()
+        option_siob -> selectPackagingOption(SIOB)
+        option_siocb -> selectPackagingOption(SIOCB)
+        option_repackaged -> selectPackagingOption(REPACKAGED)
+        btn_next -> onNextFromPackagingOptions()
+        btn_next_identifiers -> onNextFromProductIdentifiers()
+        btn_save_dimensions -> onSaveDimensions()
+        btn_recapture_dimensions -> restartVmDimensionPolling()
+        spinner_product_category -> showSelectIPCList()
+        tab_vmeasure -> switchToVMeasureMode()
+        tab_manual -> {
+            if (!hasManualModePermission) showError("No permission for Manual mode")
+            else switchToManualMode()
+        }
+    }
+}
+
+// === PERMISSION CHECK ===
+fun checkUserPermissionForManualMode() {
+    // Calls UMS API to check if user has manual mode permission
+    // Sets hasManualModePermission = true/false based on response
+    // On error: defaults to no permission (safer approach)
+}

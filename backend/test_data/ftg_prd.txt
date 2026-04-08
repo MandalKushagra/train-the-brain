@@ -1,0 +1,61 @@
+FTG (First Time Good) Dimension Capture Flow - Revamped
+
+The new FTG flow captures product dimensions and weight at fulfillment centers.
+It has 4 screens with a linear navigation flow.
+
+== Screen 0: SKU Search ==
+- User scans barcode or types SKU in search box
+- Autocomplete results appear as product cards showing product name, SKU, client name
+- Barcode scanning auto-parses the scanned value to extract SKU
+- User taps a product card to select it and proceed
+- Input field is disabled until client templates are loaded
+
+== Screen 1: Packaging Options ==
+- Three card options displayed vertically:
+  1. SIOB (Ships In Own Box) - single item in its own box
+  2. SIOCB (Ships In Own Case Box) - multiple same SKUs in one case box
+  3. Repackaged - item needs secondary packaging
+- If SIOCB selected: "Items Per Box" input appears (integer only, min 2, max 10000)
+- Next button is disabled until a packaging option is selected
+- If SIOCB: Next button disabled until valid items_per_box entered
+
+== Screen 2: Product Identifiers ==
+- Product Category dropdown (mandatory if FC has SDP config enabled)
+- Scannable ID input (optional text field)
+- Product Image URL input (optional, must start with http:// or https://)
+- Next button disabled until mandatory fields are valid
+
+== Screen 3: Dimension & Weight Capture ==
+- Tab selector at top: V-Measure (default) | Manual
+- V-Measure mode:
+  - Shows generated barcode (format: DLVSKU{sku} or DLVSKU{sku}-{itemsPerBox} for SIOCB)
+  - Instructions: place product on V-Measure machine, scan the barcode
+  - Auto-polls API every 2 seconds for dimension data
+  - When data received: displays L x W x H (cm) and Weight (kg)
+  - Recapture button to re-scan if values look wrong
+  - Error if dimensions exceed configured machine limits
+- Manual mode:
+  - Requires UMS permission check (only HRMS-tagged users can access)
+  - If no permission: shows error "You do not have permission to use Manual mode"
+  - Length, Breadth, Height inputs (2 decimal places, max 999 cm, must be > 0)
+  - Weight input (3 decimal places, max 2000 kg, must be > 0)
+  - Warning popup if manual values are within V-Measure range
+- Save Dimensions button (disabled until all dimension fields are valid and > 0)
+- On save: updates product details via API, shows success, navigates back to SKU search
+
+== Navigation ==
+SKU Search -> Packaging Options -> Product Identifiers -> Dimension & Weight -> (save) -> SKU Search
+
+== Back Navigation ==
+- Toolbar back button navigates to previous screen
+- From Packaging Options: goes back to SKU Search
+- From Product Identifiers: goes back to Packaging Options
+- From Dimension & Weight: goes back to Product Identifiers
+
+== Error Scenarios ==
+1. V-Measure exceeds limits: "This SKU/Box is outside the V-Measure limit"
+2. Machine not configured: "This machine is not configured. Contact IT team."
+3. No manual mode permission: "You do not have permission to use Manual mode"
+4. Invalid image URL: "Please enter Valid url"
+5. Items per box out of range: "Please enter a valid number of items per box (minimum 2, maximum 10000)"
+6. Dimension values zero or negative: "All dimension values must be greater than 0"
