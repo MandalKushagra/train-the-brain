@@ -5,7 +5,7 @@ export const manifest = {
     {
       step_id: 1,
       screen: "packaging_options",
-      screenshot: "/screens/packaging_options.png",
+      screenshot: "/screens/ftg_11.png",
       title: "Choose Packaging Type",
       instruction: "Tap 'Ships In Own Box' to select packaging",
       tip: "SIOB means the product ships in its original box without repackaging",
@@ -16,7 +16,7 @@ export const manifest = {
     {
       step_id: 2,
       screen: "packaging_options",
-      screenshot: "/screens/packaging_options.png",
+      screenshot: "/screens/ftg_11.png",
       title: "Proceed to Next Step",
       instruction: "Tap 'Next' to continue",
       tip: null,
@@ -27,7 +27,7 @@ export const manifest = {
     {
       step_id: 3,
       screen: "product_identifiers",
-      screenshot: "/screens/product_identifiers.png",
+      screenshot: "/screens/ftg_06.png",
       title: "Select Product Category",
       instruction: "Tap the dropdown to select a category",
       tip: "Product category is mandatory when SDP config is enabled for your FC",
@@ -38,7 +38,7 @@ export const manifest = {
     {
       step_id: 4,
       screen: "product_identifiers",
-      screenshot: "/screens/product_identifiers.png",
+      screenshot: "/screens/ftg_06.png",
       title: "Continue to Dimensions",
       instruction: "Tap 'Next' to proceed",
       tip: "Scannable ID and Image URL are optional fields",

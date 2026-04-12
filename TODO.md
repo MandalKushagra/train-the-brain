@@ -35,6 +35,19 @@
 
 ---
 
+## PHASE 2.5: Agent 5 — Screen Mapper (AI Vision) — DISCUSS LATER
+
+**PM drops screenshots in any order, any filename. AI figures out which is which.**
+
+- [ ] Build Agent 5: takes unordered screenshots + manifest → maps each screenshot to correct step
+- [ ] Use Gemini Vision via Bifrost to analyze each screenshot
+- [ ] Auto-detect: which screen is this? (packaging, identifiers, dimensions, etc.)
+- [ ] Auto-detect: tap target coordinates (where is the SIOB card? where is the Next button?)
+- [ ] Output: manifest with screenshot paths + tap_target coordinates filled in
+- [ ] Judge pitch: "PM dumps screenshots, AI vision agent maps them automatically"
+
+---
+
 ## PHASE 3: Interactive Simulator — Responsive Web App (April 8-10)
 
 **Output: A responsive web link that works on phone + desktop**
