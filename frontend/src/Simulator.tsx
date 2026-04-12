@@ -1,5 +1,4 @@
 import { useState, useRef } from "react";
-import { manifest } from "./manifest";
 
 type QuizState = {
   active: boolean;
@@ -10,7 +9,7 @@ type QuizState = {
   selectedOption: number | null;
 };
 
-export default function Simulator() {
+export default function Simulator({ manifest, onBack }: { manifest: any; onBack: () => void }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [showError, setShowError] = useState(false);
   const [showTip, setShowTip] = useState(false);
@@ -84,8 +83,12 @@ export default function Simulator() {
             <p className="text-sm text-green-700 mt-1">Quiz Score</p>
           </div>
           <button onClick={() => { setCurrentStep(0); setCompleted(false); setTotalScore(0); setTotalQuestions(0); }}
-            className="bg-blue-600 text-white px-6 py-3 rounded-xl w-full font-semibold text-lg">
+            className="bg-blue-600 text-white px-6 py-3 rounded-xl w-full font-semibold text-lg mb-2">
             Restart Training
+          </button>
+          <button onClick={onBack}
+            className="bg-gray-200 text-gray-700 px-6 py-3 rounded-xl w-full font-semibold text-lg">
+            Back to Menu
           </button>
         </div>
       </div>

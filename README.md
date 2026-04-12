@@ -58,26 +58,35 @@ sudo apt install python3.12-venv python3-pip git -y
 
 ## Quick Start
 
+### Backend (AI Pipeline + API)
 ```bash
-# Clone
-git clone https://github.com/MandalKushagra/train-the-brain.git
 cd train-the-brain/backend
-
-# Setup Python environment
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-
-# Add your Gemini API key
 cp .env.example .env
-# Edit .env → GEMINI_API_KEY=your-key-here
+# Edit .env → add BIFROST_VIRTUAL_KEY or GEMINI_API_KEY
 
-# Run the AI pipeline
+# Test the pipeline
 python3 test_pipeline.py
 
-# Run the API server
+# Start the API server
 uvicorn api:app --reload --port 8000
 ```
+
+### Frontend (Interactive Simulator)
+```bash
+cd train-the-brain/frontend
+npm install
+npm run dev
+# Opens at http://localhost:5173
+```
+
+### End-to-End Flow
+1. Start backend: `uvicorn api:app --reload --port 8000`
+2. Start frontend: `npm run dev` (in frontend folder)
+3. Open `http://localhost:5173`
+4. Click "Demo Mode" for hardcoded training, or "Generate Live" to run AI pipeline in real-time
 
 ## Get a Gemini API Key
 
