@@ -6,7 +6,7 @@ load_dotenv()
 
 # Bifrost (Delhivery AI Gateway) config
 BIFROST_VIRTUAL_KEY = os.getenv("BIFROST_VIRTUAL_KEY", "")
-BIFROST_BASE_URL = "https://bifrost.delhivery.com/google-genai"
+BIFROST_BASE_URL = "https://bifrost.delhivery.com/google"
 GEMINI_MODEL = "gemini-2.5-flash"
 
 # Fallback: direct Gemini API (personal key, for local dev only)
