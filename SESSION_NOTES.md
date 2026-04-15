@@ -42,7 +42,7 @@ http://localhost:5173
 Edit backend/.env — comment out BIFROST_VIRTUAL_KEY:
 ```
 # BIFROST_VIRTUAL_KEY=your-key
-GEMINI_API_KEY=AIzaSyAYatmeYs2wu8qdjGlTa_H8QNZBCXIeYO8
+GEMINI_API_KEY=your-personal-key-here
 ```
 Restart backend.
 
