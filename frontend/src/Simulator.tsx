@@ -3,7 +3,7 @@ import { useState, useRef } from "react";
 type QuizState = {
   active: boolean;
   questionIndex: number;
-  questions: typeof manifest.quiz_breaks[0]["questions"];
+  questions: { question: string; options: string[]; correct: number }[];
   score: number;
   answered: boolean;
   selectedOption: number | null;
