@@ -24,40 +24,44 @@ export default function App() {
     }
   }
 
-  if (mode === "loading") return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-      <div className="text-center">
-        <div className="text-5xl mb-4 animate-spin">🧠</div>
-        <p className="text-white text-lg">AI generating training...</p>
-        <p className="text-gray-400 text-sm mt-2">~30 seconds</p>
+  if (mode === "loading") {
+    return (
+      <div style={{ minHeight: "100vh", background: "#111827", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🧠</div>
+          <p style={{ color: "white", fontSize: 18 }}>AI generating training...</p>
+          <p style={{ color: "#9CA3AF", fontSize: 14, marginTop: 8 }}>~30 seconds</p>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
-  if (mode === "demo") return (
-    <Simulator manifest={hardcodedManifest} onBack={() => setMode("menu")} />
-  );
+  if (mode === "demo") {
+    return <Simulator manifest={hardcodedManifest} onBack={() => setMode("menu")} />;
+  }
 
-  if (mode === "live" && liveData) return (
-    <Simulator manifest={liveData} onBack={() => setMode("menu")} />
-  );
+  if (mode === "live" && liveData) {
+    return <Simulator manifest={liveData} onBack={() => setMode("menu")} />;
+  }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-      <div className="max-w-sm w-full text-center">
-        <div className="text-5xl mb-3">🧠</div>
-        <h1 className="text-white text-2xl font-bold">Train the Brain</h1>
-        <p className="text-gray-400 mt-1 mb-8">Interactive Training Simulator</p>
-        <button onClick={() => setMode("demo")}
-          className="w-full bg-blue-600 text-white px-6 py-4 rounded-xl font-semibold text-lg mb-3">
-          ▶️ Demo Mode
+    <div style={{ minHeight: "100vh", background: "#111827", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ maxWidth: 384, width: "100%", textAlign: "center" }}>
+        <div style={{ fontSize: 56, marginBottom: 12 }}>🧠</div>
+        <h1 style={{ color: "white", fontSize: 24, fontWeight: "bold" }}>Train the Brain</h1>
+        <p style={{ color: "#9CA3AF", marginTop: 4, marginBottom: 32 }}>Interactive Training Simulator</p>
+
+        <button onClick={() => setMode("demo")} style={{ width: "100%", padding: "14px 0", marginBottom: 16, background: "#2563EB", color: "white", fontSize: 18, fontWeight: "bold", border: "none", borderRadius: 12, cursor: "pointer" }}>
+          ▶ Demo Mode
         </button>
-        <button onClick={goLive}
-          className="w-full bg-green-600 text-white px-6 py-4 rounded-xl font-semibold text-lg mb-3">
+
+        <button onClick={goLive} style={{ width: "100%", padding: "14px 0", marginBottom: 16, background: "#16A34A", color: "white", fontSize: 18, fontWeight: "bold", border: "none", borderRadius: 12, cursor: "pointer" }}>
           🤖 Generate Live
         </button>
-        <p className="text-gray-500 text-xs mt-4">Demo = pre-built. Live = AI pipeline real-time.</p>
-        {err && <div className="mt-4 bg-red-900/50 text-red-300 px-4 py-3 rounded-xl text-sm">{err}</div>}
+
+        <p style={{ color: "#6B7280", fontSize: 13 }}>Demo = pre-built. Live = AI pipeline real-time.</p>
+
+        {err && <div style={{ marginTop: 16, padding: 12, background: "#7F1D1D", color: "#FCA5A5", borderRadius: 8, fontSize: 14 }}>{err}</div>}
       </div>
     </div>
   );

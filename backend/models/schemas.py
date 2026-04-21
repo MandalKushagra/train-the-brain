@@ -1,6 +1,6 @@
 """Pydantic models for data flowing between agents."""
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional
 
 
 class UIElement(BaseModel):
@@ -51,14 +51,14 @@ class WorkflowStep(BaseModel):
     step_id: int
     screen: str
     action: str  # TAP, TYPE, SCAN, SELECT, VERIFY
-    target: str  # element id
-    description: str  # what happens at this step
+    target: Optional[Any] = None  # element id or object
+    description: str = ""  # what happens at this step
 
 
 class Branch(BaseModel):
     at_step: int
     condition: str
-    insert_step: Optional[str] = None
+    insert_step: Optional[Any] = None
     check: Optional[str] = None
 
 
