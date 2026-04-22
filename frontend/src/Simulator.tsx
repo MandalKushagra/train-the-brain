@@ -9,19 +9,52 @@ type QuizState = {
   selectedOption: number | null;
 };
 
-export default function Simulator({ manifest, onBack }: { manifest: any; onBack: () => void }) {
+export default function Simulator({ manifest, onBack, onComplete, assessment }: {
+  manifest: any;
+  onBack: () => void;
+  onComplete?: (data: any) => void;
+  assessment?: any;
+}) {
   const [currentStep, setCurrentStep] = useState(0);
   const [showError, setShowError] = useState(false);
   const [showTip, setShowTip] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [totalScore, setTotalScore] = useState(0);
   const [totalQuestions, setTotalQuestions] = useState(0);
+  const [stepStartTime, setStepStartTime] = useState(Date.now());
+  const [trainingStartTime] = useState(Date.now());
+  const [stepMetrics, setStepMetrics] = useState<Record<number, { wrong: number; hints: number; time: number }>>({});
   const [quiz, setQuiz] = useState<QuizState>({
     active: false, questionIndex: 0, questions: [], score: 0, answered: false, selectedOption: null,
   });
   const imgRef = useRef<HTMLDivElement>(null);
   const step = manifest.steps[currentStep];
   if (!step && !completed) return null;
+
+  function handleCompletion() {
+    const timeTaken = Math.round((Date.now() - trainingStartTime) / 1000);
+    const finalScore = totalScore;
+    const finalQuestions = totalQuestions;
+    const metrics = Object.entries(stepMetrics).map(([sid, m]) => ({
+      step_id: parseInt(sid),
+      wrong_attempts: m.wrong || 0,
+      hints_used: m.hints || 0,
+      show_me_used: false,
+      skipped: false,
+      time_on_step_seconds: m.time || 0,
+    }));
+    const payload = {
+      quiz_score: finalScore,
+      total_questions: finalQuestions,
+      time_taken_seconds: timeTaken,
+      total_hints_used: metrics.reduce((s, m) => s + m.hints_used, 0),
+      total_skips: 0,
+      step_metrics: metrics,
+      passed: finalQuestions > 0 ? finalScore / finalQuestions >= 0.6 : true,
+    };
+    setCompleted(true);
+    if (onComplete) onComplete(payload);
+  }
 
   function handleScreenClick(e: React.MouseEvent) {
     if (quiz.active || completed) return;
@@ -33,9 +66,19 @@ export default function Simulator({ manifest, onBack }: { manifest: any; onBack:
     if (xPct >= t.x && xPct <= t.x + t.width && yPct >= t.y && yPct <= t.y + t.height) {
       setShowError(false);
       setShowTip(false);
+      // Record step time
+      const elapsed = Math.round((Date.now() - stepStartTime) / 1000);
+      setStepMetrics(prev => ({
+        ...prev,
+        [step.step_id]: { ...prev[step.step_id], time: (prev[step.step_id]?.time || 0) + elapsed },
+      }));
       goNext();
     } else {
       setShowError(true);
+      setStepMetrics(prev => ({
+        ...prev,
+        [step.step_id]: { ...(prev[step.step_id] || { wrong: 0, hints: 0, time: 0 }), wrong: (prev[step.step_id]?.wrong || 0) + 1 },
+      }));
       setTimeout(() => setShowError(false), 2500);
     }
   }
@@ -45,9 +88,10 @@ export default function Simulator({ manifest, onBack }: { manifest: any; onBack:
     if (quizBreak) {
       setQuiz({ active: true, questionIndex: 0, questions: quizBreak.questions, score: 0, answered: false, selectedOption: null });
     } else if (currentStep + 1 >= manifest.steps.length) {
-      setCompleted(true);
+      handleCompletion();
     } else {
       setCurrentStep(currentStep + 1);
+      setStepStartTime(Date.now());
       setShowTip(false);
     }
   }
@@ -65,8 +109,8 @@ export default function Simulator({ manifest, onBack }: { manifest: any; onBack:
     } else {
       setTotalScore(s => s + quiz.score);
       setTotalQuestions(t => t + quiz.questions.length);
-      if (currentStep + 1 >= manifest.steps.length) { setCompleted(true); }
-      else { setCurrentStep(currentStep + 1); }
+      if (currentStep + 1 >= manifest.steps.length) { handleCompletion(); }
+      else { setCurrentStep(currentStep + 1); setStepStartTime(Date.now()); }
       setQuiz({ active: false, questionIndex: 0, questions: [], score: 0, answered: false, selectedOption: null });
     }
   }

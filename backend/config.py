@@ -12,6 +12,7 @@ GEMINI_MODEL = "gemini-2.5-flash"
 # Fallback: direct Gemini API (personal key, for local dev only)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+ADMIN_KEY = os.getenv("ADMIN_KEY", "admin123")  # Simple admin key for hackathon
 
 # Mandatory hackathon security guardrails (included in all LLM calls)
 SECURITY_GUARDRAILS = """
