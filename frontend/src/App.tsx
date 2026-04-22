@@ -1,24 +1,25 @@
 import { useState, useEffect } from "react";
 import Simulator from "./Simulator";
 import AdminPanel from "./AdminPanel";
+import DynamicSimulator from "./DynamicSimulator";
+import AdminForm from "./AdminForm";
 import { manifest as hardcodedManifest } from "./manifest";
 
 const API = "http://localhost:8000";
 
-type AppMode = "menu" | "loading" | "demo" | "live" | "admin-login" | "admin" | "training-link" | "training-complete";
+type AppMode = "menu" | "loading" | "demo" | "live" | "admin-login" | "admin" | "training-link" | "training-complete" | "create-sim" | "dynamic";
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>("menu");
   const [liveData, setLiveData] = useState<any>(null);
+  const [dynamicData, setDynamicData] = useState<any>(null);
   const [err, setErr] = useState("");
   const [adminKey, setAdminKey] = useState("");
   const [adminKeyInput, setAdminKeyInput] = useState("");
-  // Training link state
   const [trainingData, setTrainingData] = useState<any>(null);
   const [linkToken, setLinkToken] = useState("");
   const [completionData, setCompletionData] = useState<any>(null);
 
-  // Check URL for training link on mount
   useEffect(() => {
     const path = window.location.pathname;
     if (path.startsWith("/t/")) {
@@ -70,6 +71,11 @@ export default function App() {
     }
   }
 
+  function handleSimGenerated(data: any) {
+    setDynamicData(data.manifest);
+    setMode("dynamic");
+  }
+
   async function handleTrainingComplete(completionPayload: any) {
     if (linkToken) {
       try {
@@ -85,8 +91,6 @@ export default function App() {
     setCompletionData(completionPayload);
     setMode("training-complete");
   }
-
-  // --- Render modes ---
 
   if (mode === "loading") return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center">
@@ -120,17 +124,11 @@ export default function App() {
     </div>
   );
 
-  if (mode === "admin") return (
-    <AdminPanel adminKey={adminKey} onBack={() => setMode("menu")} />
-  );
-
-  if (mode === "demo") return (
-    <Simulator manifest={hardcodedManifest} onBack={() => setMode("menu")} />
-  );
-
-  if (mode === "live" && liveData) return (
-    <Simulator manifest={liveData} onBack={() => setMode("menu")} />
-  );
+  if (mode === "admin") return <AdminPanel adminKey={adminKey} onBack={() => setMode("menu")} />;
+  if (mode === "create-sim") return <AdminForm onGenerated={handleSimGenerated} onBack={() => setMode("menu")} />;
+  if (mode === "dynamic" && dynamicData) return <DynamicSimulator manifest={dynamicData} onBack={() => setMode("menu")} />;
+  if (mode === "demo") return <Simulator manifest={hardcodedManifest} onBack={() => setMode("menu")} />;
+  if (mode === "live" && liveData) return <Simulator manifest={liveData} onBack={() => setMode("menu")} />;
 
   if (mode === "training-link" && trainingData) return (
     <div>
@@ -138,12 +136,8 @@ export default function App() {
         Training for: <span className="text-white font-medium">{trainingData.operator_name}</span>
         {" · "}{trainingData.simulation_name}
       </div>
-      <Simulator
-        manifest={trainingData.manifest}
-        assessment={trainingData.assessment}
-        onBack={() => setMode("menu")}
-        onComplete={handleTrainingComplete}
-      />
+      <Simulator manifest={trainingData.manifest} assessment={trainingData.assessment}
+        onBack={() => setMode("menu")} onComplete={handleTrainingComplete} />
     </div>
   );
 
@@ -152,19 +146,13 @@ export default function App() {
       <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center">
         <div className="text-6xl mb-4">🎉</div>
         <h2 className="text-2xl font-bold mb-2">Training Complete!</h2>
-        {completionData && (
-          <div className="mt-4">
-            {completionData.quiz_score != null && (
-              <div className="bg-green-50 rounded-xl p-6 mb-4">
-                <p className="text-4xl font-bold text-green-600">
-                  {completionData.quiz_score}/{completionData.total_questions}
-                </p>
-                <p className="text-sm text-green-700 mt-1">Quiz Score</p>
-                <p className={`text-sm mt-2 font-semibold ${completionData.passed ? "text-green-600" : "text-red-600"}`}>
-                  {completionData.passed ? "✅ PASSED" : "❌ FAILED — Please retake"}
-                </p>
-              </div>
-            )}
+        {completionData && completionData.quiz_score != null && (
+          <div className="bg-green-50 rounded-xl p-6 mb-4">
+            <p className="text-4xl font-bold text-green-600">{completionData.quiz_score}/{completionData.total_questions}</p>
+            <p className="text-sm text-green-700 mt-1">Quiz Score</p>
+            <p className={`text-sm mt-2 font-semibold ${completionData.passed ? "text-green-600" : "text-red-600"}`}>
+              {completionData.passed ? "✅ PASSED" : "❌ FAILED — Please retake"}
+            </p>
           </div>
         )}
         <p className="text-gray-500 text-sm">You can close this window now.</p>
@@ -172,13 +160,16 @@ export default function App() {
     </div>
   );
 
-  // --- Main menu ---
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
       <div className="max-w-sm w-full text-center">
         <div className="text-5xl mb-3">🧠</div>
         <h1 className="text-white text-2xl font-bold">Train the Brain</h1>
         <p className="text-gray-400 mt-1 mb-8">Interactive Training Simulator</p>
+        <button onClick={() => setMode("create-sim")}
+          className="w-full bg-purple-600 text-white px-6 py-4 rounded-xl font-semibold text-lg mb-3">
+          ✨ Create New Simulation
+        </button>
         <button onClick={() => setMode("demo")}
           className="w-full bg-blue-600 text-white px-6 py-4 rounded-xl font-semibold text-lg mb-3">
           ▶️ Demo Mode
@@ -188,10 +179,10 @@ export default function App() {
           🤖 Generate Live
         </button>
         <button onClick={() => setMode("admin-login")}
-          className="w-full bg-purple-600 text-white px-6 py-4 rounded-xl font-semibold text-lg mb-3">
+          className="w-full bg-gray-700 text-white px-6 py-4 rounded-xl font-semibold text-lg mb-3">
           🔐 Admin Panel
         </button>
-        <p className="text-gray-500 text-xs mt-4">Demo = pre-built · Live = AI pipeline · Admin = manage trainings</p>
+        <p className="text-gray-500 text-xs mt-4">Create New = dynamic AI · Demo = pre-built · Live = AI pipeline · Admin = manage</p>
         {err && <div className="mt-4 bg-red-900/50 text-red-300 px-4 py-3 rounded-xl text-sm">{err}</div>}
       </div>
     </div>
