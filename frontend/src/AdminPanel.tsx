@@ -49,9 +49,18 @@ type DashboardStats = {
 };
 
 export default function AdminPanel({ adminKey, onBack }: { adminKey: string; onBack: () => void }) {
-  const [tab, setTab] = useState<"dashboard" | "simulations" | "assign" | "search">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "create" | "simulations" | "assign" | "search">("dashboard");
 
   const headers = { "x-admin-key": adminKey };
+
+  const tabs = ["dashboard", "create", "simulations", "assign", "search"] as const;
+  const tabLabels: Record<string, string> = {
+    dashboard: "📊 Dashboard",
+    create: "➕ Create",
+    simulations: "📋 Simulations",
+    assign: "🔗 Assign",
+    search: "🔍 Search",
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -60,21 +69,193 @@ export default function AdminPanel({ adminKey, onBack }: { adminKey: string; onB
         <button onClick={onBack} className="text-gray-400 hover:text-white text-sm">← Back</button>
         <span className="text-lg font-bold">🧠 Admin Panel</span>
         <div className="flex-1" />
-        {(["dashboard", "simulations", "assign", "search"] as const).map((t) => (
+        {tabs.map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               tab === t ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"
             }`}>
-            {t === "dashboard" ? "📊 Dashboard" : t === "simulations" ? "📋 Simulations" : t === "assign" ? "🔗 Assign" : "🔍 Search"}
+            {tabLabels[t]}
           </button>
         ))}
       </div>
 
       <div className="max-w-5xl mx-auto p-6">
         {tab === "dashboard" && <DashboardTab headers={headers} />}
+        {tab === "create" && <CreateTab headers={headers} onCreated={() => setTab("simulations")} />}
         {tab === "simulations" && <SimulationsTab headers={headers} />}
         {tab === "assign" && <AssignTab headers={headers} />}
         {tab === "search" && <SearchTab headers={headers} />}
+      </div>
+    </div>
+  );
+}
+
+function CreateTab({ headers, onCreated }: { headers: Record<string, string>; onCreated: () => void }) {
+  const [workflowName, setWorkflowName] = useState("");
+  const [screenshots, setScreenshots] = useState<File[]>([]);
+  const [prdFiles, setPrdFiles] = useState<File[]>([]);
+  const [sopFiles, setSopFiles] = useState<File[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<any>(null);
+
+  function removeFile(list: File[], setList: (f: File[]) => void, idx: number) {
+    setList(list.filter((_, i) => i !== idx));
+  }
+
+  async function handleSubmit() {
+    if (!workflowName.trim()) { setError("Workflow name is required"); return; }
+    if (prdFiles.length === 0) { setError("At least one PRD PDF is required"); return; }
+
+    setLoading(true);
+    setError("");
+    setResult(null);
+
+    const formData = new FormData();
+    formData.append("workflow_name", workflowName.trim());
+    screenshots.forEach((f) => formData.append("screenshots", f));
+    prdFiles.forEach((f) => formData.append("prd_files", f));
+    sopFiles.forEach((f) => formData.append("sop_files", f));
+
+    try {
+      const r = await fetch(API + "/admin/generate-from-upload", {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+      if (!r.ok) {
+        const err = await r.json();
+        throw new Error(err.detail || "Upload failed");
+      }
+      setResult(await r.json());
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (result) {
+    return (
+      <div>
+        <h2 className="text-xl font-bold mb-4">Simulation Created</h2>
+        <div className="bg-gray-800 rounded-xl p-6 border border-green-700 space-y-3">
+          <div className="text-4xl text-center mb-2">✅</div>
+          <p className="text-center text-lg font-semibold">{result.workflow_name}</p>
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <div className="bg-gray-700 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold">{result.steps_generated}</div>
+              <div className="text-gray-400 text-sm">Steps Generated</div>
+            </div>
+            <div className="bg-gray-700 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold">{result.questions_generated}</div>
+              <div className="text-gray-400 text-sm">Quiz Questions</div>
+            </div>
+          </div>
+          <p className="text-gray-400 text-sm text-center mt-2">Status: Draft — go to Simulations to publish it.</p>
+          <button onClick={onCreated}
+            className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold mt-4">
+            Go to Simulations →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h2 className="text-xl font-bold mb-4">Create New Simulation</h2>
+      <div className="bg-gray-800 rounded-xl p-6 border border-gray-700 space-y-5">
+        {/* Workflow Name */}
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">Workflow Name *</label>
+          <input type="text" value={workflowName} onChange={(e) => setWorkflowName(e.target.value)}
+            placeholder="e.g. FTG Dimension Capture"
+            className="w-full bg-gray-700 text-white rounded-lg px-4 py-2.5 border border-gray-600 focus:border-blue-500 focus:outline-none" />
+        </div>
+
+        {/* Screenshots */}
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">Screen Images (.png)</label>
+          <p className="text-xs text-gray-500 mb-2">Upload screenshots of the app screens for this workflow</p>
+          <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-gray-600 rounded-lg cursor-pointer hover:border-blue-500 transition-colors">
+            <div className="text-center">
+              <span className="text-2xl">🖼️</span>
+              <p className="text-sm text-gray-400 mt-1">Click to select PNG files</p>
+            </div>
+            <input type="file" accept=".png" multiple className="hidden"
+              onChange={(e) => setScreenshots((prev) => [...prev, ...Array.from(e.target.files || [])])} />
+          </label>
+          {screenshots.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {screenshots.map((f, i) => (
+                <span key={i} className="bg-gray-700 text-sm px-3 py-1 rounded-full flex items-center gap-2">
+                  🖼️ {f.name}
+                  <button onClick={() => removeFile(screenshots, setScreenshots, i)} className="text-red-400 hover:text-red-300">×</button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* PRD Files */}
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">PRD Documents (.pdf) *</label>
+          <p className="text-xs text-gray-500 mb-2">Product requirement documents describing the feature</p>
+          <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-gray-600 rounded-lg cursor-pointer hover:border-blue-500 transition-colors">
+            <div className="text-center">
+              <span className="text-2xl">📄</span>
+              <p className="text-sm text-gray-400 mt-1">Click to select PDF files</p>
+            </div>
+            <input type="file" accept=".pdf" multiple className="hidden"
+              onChange={(e) => setPrdFiles((prev) => [...prev, ...Array.from(e.target.files || [])])} />
+          </label>
+          {prdFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {prdFiles.map((f, i) => (
+                <span key={i} className="bg-gray-700 text-sm px-3 py-1 rounded-full flex items-center gap-2">
+                  📄 {f.name}
+                  <button onClick={() => removeFile(prdFiles, setPrdFiles, i)} className="text-red-400 hover:text-red-300">×</button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* SOP Files */}
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">SOP Documents (.pdf)</label>
+          <p className="text-xs text-gray-500 mb-2">Standard operating procedures (optional)</p>
+          <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-gray-600 rounded-lg cursor-pointer hover:border-blue-500 transition-colors">
+            <div className="text-center">
+              <span className="text-2xl">📋</span>
+              <p className="text-sm text-gray-400 mt-1">Click to select PDF files</p>
+            </div>
+            <input type="file" accept=".pdf" multiple className="hidden"
+              onChange={(e) => setSopFiles((prev) => [...prev, ...Array.from(e.target.files || [])])} />
+          </label>
+          {sopFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {sopFiles.map((f, i) => (
+                <span key={i} className="bg-gray-700 text-sm px-3 py-1 rounded-full flex items-center gap-2">
+                  📋 {f.name}
+                  <button onClick={() => removeFile(sopFiles, setSopFiles, i)} className="text-red-400 hover:text-red-300">×</button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Submit */}
+        {error && <p className="text-red-400 text-sm">{error}</p>}
+        <button onClick={handleSubmit} disabled={loading}
+          className="w-full bg-green-600 text-white px-6 py-3 rounded-lg font-semibold text-lg disabled:opacity-50">
+          {loading ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="animate-spin">🧠</span> Generating Training... (this may take a minute)
+            </span>
+          ) : "🚀 Generate Training Simulation"}
+        </button>
       </div>
     </div>
   );

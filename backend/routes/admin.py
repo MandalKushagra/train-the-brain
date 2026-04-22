@@ -1,13 +1,18 @@
 """Admin routes — simulation management, assignment, operator search."""
+import os
+import shutil
+import uuid
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
+import pdfplumber
 from database import get_db
 from models.db_models import Simulation, Operator, TrainingAssignment, TrainingCompletion, StepMetric
 from config import ADMIN_KEY
 from link_utils import generate_link_token
+from pipeline import run_pipeline
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -311,3 +316,106 @@ def _assignment_to_dict(a: TrainingAssignment) -> dict:
         d["total_hints_used"] = a.completion.total_hints_used
         d["total_skips"] = a.completion.total_skips
     return d
+
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "uploads")
+
+
+@router.post("/generate-from-upload", dependencies=[Depends(require_admin)])
+async def generate_from_upload(
+    workflow_name: str = Form(...),
+    screenshots: list[UploadFile] = File(default=[]),
+    prd_files: list[UploadFile] = File(default=[]),
+    sop_files: list[UploadFile] = File(default=[]),
+    db: Session = Depends(get_db),
+):
+    """Accept file uploads (PNGs for screens, PDFs for PRD/SOP), run the AI pipeline, and create a simulation."""
+    job_id = str(uuid.uuid4())[:8]
+    job_dir = os.path.join(UPLOAD_DIR, job_id)
+    screens_dir = os.path.join(job_dir, "screens")
+    os.makedirs(screens_dir, exist_ok=True)
+
+    try:
+        # Save screenshot PNGs
+        for f in screenshots:
+            dest = os.path.join(screens_dir, f.filename or f"screen_{uuid.uuid4()[:6]}.png")
+            with open(dest, "wb") as out:
+                out.write(await f.read())
+
+        # Extract text from PRD PDFs
+        prd_text = ""
+        for f in prd_files:
+            tmp = os.path.join(job_dir, f.filename or "prd.pdf")
+            with open(tmp, "wb") as out:
+                out.write(await f.read())
+            with pdfplumber.open(tmp) as pdf:
+                for page in pdf.pages:
+                    prd_text += (page.extract_text() or "") + "\n"
+
+        # Extract text from SOP PDFs
+        sop_text = ""
+        for f in sop_files:
+            tmp = os.path.join(job_dir, f.filename or "sop.pdf")
+            with open(tmp, "wb") as out:
+                out.write(await f.read())
+            with pdfplumber.open(tmp) as pdf:
+                for page in pdf.pages:
+                    sop_text += (page.extract_text() or "") + "\n"
+
+        # Build figma description from screenshot filenames
+        screen_files = sorted(os.listdir(screens_dir))
+        figma_desc = f"Screenshots uploaded: {', '.join(screen_files)}" if screen_files else ""
+
+        # Combine PRD + SOP as code_text (SOP serves as process documentation)
+        combined_code = sop_text.strip() if sop_text.strip() else "No SOP provided."
+
+        if not prd_text.strip():
+            raise HTTPException(status_code=400, detail="At least one PRD PDF is required.")
+
+        # Run the AI pipeline
+        result = run_pipeline(
+            prd_text=prd_text,
+            code_text=combined_code,
+            figma_description=figma_desc,
+            workflow_name=workflow_name,
+            screenshots_dir=screens_dir,
+            generate_video=False,
+        )
+
+        manifest_data = result.manifest.model_dump()
+        assessment_data = result.assessment.model_dump()
+        wf_id = manifest_data.get("workflow_id", f"upload_{job_id}")
+
+        # Create simulation in DB
+        existing = db.query(Simulation).filter(Simulation.workflow_id == wf_id).first()
+        if existing:
+            wf_id = f"{wf_id}_{job_id}"
+
+        sim = Simulation(
+            workflow_id=wf_id,
+            workflow_name=workflow_name,
+            manifest_json=manifest_data,
+            assessment_json=assessment_data,
+            status="draft",
+        )
+        db.add(sim)
+        db.commit()
+        db.refresh(sim)
+
+        return {
+            "status": "ok",
+            "simulation_id": sim.id,
+            "workflow_id": wf_id,
+            "workflow_name": workflow_name,
+            "steps_generated": len(manifest_data.get("steps", [])),
+            "questions_generated": len(assessment_data.get("questions", [])),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Pipeline failed: {str(e)}")
+    finally:
+        # Clean up uploaded files
+        if os.path.exists(job_dir):
+            shutil.rmtree(job_dir, ignore_errors=True)
+
