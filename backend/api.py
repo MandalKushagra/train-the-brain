@@ -13,8 +13,12 @@ from pipeline import run_pipeline
 from database import init_db
 from routes.admin import router as admin_router
 from routes.training import router as training_router
+from api_simulation import router as sim_router
 
 app = FastAPI(title="Train the Brain API", version="0.3.0")
+
+# Mount simulation optimization endpoints
+app.include_router(sim_router)
 
 # Allow frontend to call backend
 app.add_middleware(
