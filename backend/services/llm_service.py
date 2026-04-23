@@ -12,7 +12,8 @@ if BIFROST_VIRTUAL_KEY:
     oai_client = openai.OpenAI(
         base_url="https://bifrost.delhivery.com/openai",
         api_key="dummy-key",
-        default_headers={"x-bf-vk": BIFROST_VIRTUAL_KEY}
+        default_headers={"x-bf-vk": BIFROST_VIRTUAL_KEY},
+        timeout=300.0,
     )
     USE_BIFROST = True
     print("🔗 Using Bifrost AI Gateway (OpenAI-compatible)")

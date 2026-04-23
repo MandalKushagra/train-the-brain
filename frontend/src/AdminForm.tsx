@@ -3,13 +3,15 @@ import { useState } from "react";
 const API = "http://localhost:8000";
 
 interface AdminFormProps {
-  onGenerated: (data: any) => void;
+  onSubmitted: () => void;
   onBack: () => void;
 }
 
-export default function AdminForm({ onGenerated, onBack }: AdminFormProps) {
+export default function AdminForm({ onSubmitted, onBack }: AdminFormProps) {
   const [workflowName, setWorkflowName] = useState("");
-  const [githubUrls, setGithubUrls] = useState([""]);
+  const [prdText, setPrdText] = useState("");
+  const [githubUrls, setGithubUrls] = useState([{ url: "", branch: "" }]);
+  const [figmaUrls, setFigmaUrls] = useState([""]);
   const [filePatterns, setFilePatterns] = useState("");
   const [files, setFiles] = useState<FileList | null>(null);
   const [loading, setLoading] = useState(false);
@@ -17,10 +19,6 @@ export default function AdminForm({ onGenerated, onBack }: AdminFormProps) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!files || files.length === 0) {
-      setError("Please upload at least one screenshot");
-      return;
-    }
     if (!workflowName.trim()) {
       setError("Please enter a workflow name");
       return;
@@ -31,10 +29,16 @@ export default function AdminForm({ onGenerated, onBack }: AdminFormProps) {
 
     const formData = new FormData();
     formData.append("workflow_name", workflowName);
-    formData.append("github_repo_urls", JSON.stringify(githubUrls.filter(u => u.trim())));
+    formData.append("prd_text", prdText);
+    formData.append("github_repo_urls", JSON.stringify(
+      githubUrls.filter(r => r.url.trim()).map(r => ({ url: r.url.trim(), branch: r.branch.trim() || "main" }))
+    ));
+    formData.append("figma_urls", JSON.stringify(figmaUrls.filter(u => u.trim())));
     formData.append("file_patterns", filePatterns);
-    for (let i = 0; i < files.length; i++) {
-      formData.append("screenshots", files[i]);
+    if (files) {
+      for (let i = 0; i < files.length; i++) {
+        formData.append("screenshots", files[i]);
+      }
     }
 
     try {
@@ -47,7 +51,7 @@ export default function AdminForm({ onGenerated, onBack }: AdminFormProps) {
         throw new Error(err.error || `API error ${res.status}`);
       }
       const data = await res.json();
-      onGenerated(data);
+      onSubmitted();
     } catch (err: any) {
       setError(err.message + " — is the backend running?");
     } finally {
@@ -60,11 +64,8 @@ export default function AdminForm({ onGenerated, onBack }: AdminFormProps) {
       <div style={styles.container}>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>🧠</div>
-          <p style={{ color: "white", fontSize: 18 }}>AI generating simulation...</p>
-          <p style={{ color: "#9CA3AF", fontSize: 14, marginTop: 8 }}>
-            Vision AI is analyzing your screenshots
-          </p>
-          <p style={{ color: "#6B7280", fontSize: 12, marginTop: 4 }}>~30 seconds per screenshot</p>
+          <p style={{ color: "white", fontSize: 18 }}>Submitting to AI pipeline...</p>
+          <p style={{ color: "#9CA3AF", fontSize: 14, marginTop: 8 }}>Redirecting to dashboard</p>
         </div>
       </div>
     );
@@ -87,8 +88,17 @@ export default function AdminForm({ onGenerated, onBack }: AdminFormProps) {
             style={styles.input}
           />
 
-          <label style={styles.label}>Screenshots * (PNG/JPG)</label>
-          <input
+          <label style={styles.label}>PRD / Workflow Description (optional)</label>
+          <textarea
+            value={prdText}
+            onChange={(e) => setPrdText(e.target.value)}
+            placeholder="Describe the workflow steps, screens, and user actions..."
+            rows={5}
+            style={{ ...styles.input, resize: "vertical" as const, minHeight: 100 }}
+          />
+          <p style={styles.hint}>Paste PRD text or describe the workflow. Used with GitHub code to generate screens without screenshots.</p>
+
+          <label style={styles.label}>Screenshots (optional, PNG/JPG)</label>          <input
             type="file"
             multiple
             accept="image/png,image/jpeg"
@@ -100,17 +110,28 @@ export default function AdminForm({ onGenerated, onBack }: AdminFormProps) {
           )}
 
           <label style={styles.label}>GitHub Repository URLs (optional)</label>
-          {githubUrls.map((url, i) => (
-            <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          {githubUrls.map((repo, i) => (
+            <div key={i} style={{ display: "flex", gap: 6, marginBottom: 8 }}>
               <input
                 type="text"
-                value={url}
+                value={repo.url}
                 onChange={(e) => {
                   const updated = [...githubUrls];
-                  updated[i] = e.target.value;
+                  updated[i] = { ...updated[i], url: e.target.value };
                   setGithubUrls(updated);
                 }}
                 placeholder="https://github.com/org/repo"
+                style={{ ...styles.input, flex: 3 }}
+              />
+              <input
+                type="text"
+                value={repo.branch}
+                onChange={(e) => {
+                  const updated = [...githubUrls];
+                  updated[i] = { ...updated[i], branch: e.target.value };
+                  setGithubUrls(updated);
+                }}
+                placeholder="main"
                 style={{ ...styles.input, flex: 1 }}
               />
               {githubUrls.length > 1 && (
@@ -126,11 +147,44 @@ export default function AdminForm({ onGenerated, onBack }: AdminFormProps) {
           ))}
           <button
             type="button"
-            onClick={() => setGithubUrls([...githubUrls, ""])}
+            onClick={() => setGithubUrls([...githubUrls, { url: "", branch: "" }])}
             style={{ background: "none", border: "1px dashed #4B5563", color: "#9CA3AF", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, marginTop: 4 }}
           >
             + Add another repo
           </button>
+          <label style={styles.label}>Figma File URLs (optional)</label>
+          {figmaUrls.map((url, i) => (
+            <div key={i} style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              <input
+                type="text"
+                value={url}
+                onChange={(e) => {
+                  const updated = [...figmaUrls];
+                  updated[i] = e.target.value;
+                  setFigmaUrls(updated);
+                }}
+                placeholder="https://www.figma.com/file/..."
+                style={{ ...styles.input, flex: 1 }}
+              />
+              {figmaUrls.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setFigmaUrls(figmaUrls.filter((_, j) => j !== i))}
+                  style={{ background: "#7F1D1D", color: "#FCA5A5", border: "none", borderRadius: 8, padding: "0 12px", cursor: "pointer", fontSize: 16 }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setFigmaUrls([...figmaUrls, ""])}
+            style={{ background: "none", border: "1px dashed #4B5563", color: "#9CA3AF", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, marginTop: 4 }}
+          >
+            + Add another Figma file
+          </button>
+          <p style={styles.hint}>Figma MCP integration coming soon — URLs stored for future use</p>
 
           <label style={styles.label}>File Patterns (optional)</label>
           <input

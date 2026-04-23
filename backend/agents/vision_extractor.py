@@ -230,12 +230,26 @@ class VisionExtractorAgent:
         code_context: Optional[CodeContext],
     ) -> ScreenConfig:
         """Core extraction logic — called within the timeout wrapper."""
+        fname = os.path.basename(image_path)
+        fsize = os.path.getsize(image_path) / 1024
+        print(f"🔍 [{fname}] Starting vision extraction ({fsize:.0f} KB)...")
+        
         prompt = self._build_prompt(image_path, code_context)
+        print(f"🔍 [{fname}] Prompt built ({len(prompt)} chars). Encoding image...")
+        
         image_b64 = _encode_image_base64(image_path)
         media_type = _image_media_type(image_path)
-
+        print(f"🔍 [{fname}] Image encoded ({len(image_b64) // 1024} KB base64). Calling LLM...")
+        
+        import time
+        start = time.time()
         raw_json = await self._call_vision_llm(prompt, image_b64, media_type)
-        return self._parse_response(raw_json, image_path)
+        elapsed = time.time() - start
+        print(f"✅ [{fname}] LLM responded in {elapsed:.1f}s. Parsing response...")
+        
+        config = self._parse_response(raw_json, image_path)
+        print(f"✅ [{fname}] Extracted {len(config.elements)} elements from screen '{config.screen_name}'")
+        return config
 
     def _build_prompt(
         self,
@@ -352,11 +366,13 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no ```json blocks, no explanatio
             }
         ]
 
+        print(f"   📡 Sending to Bifrost (model: gemini/{self._model}, payload: ~{len(image_b64)//1024}KB)...")
         # Synchronous call — same pattern as llm_service.py which works
         response = self._oai_client.chat.completions.create(
             model=f"gemini/{self._model}",
             messages=messages,
         )
+        print(f"   📡 Bifrost responded. Parsing JSON...")
         text = response.choices[0].message.content.strip()
         return self._parse_json_text(text)
 

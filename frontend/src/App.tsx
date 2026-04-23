@@ -3,11 +3,12 @@ import Simulator from "./Simulator";
 import AdminPanel from "./AdminPanel";
 import DynamicSimulator from "./DynamicSimulator";
 import AdminForm from "./AdminForm";
+import SimDashboard from "./SimDashboard";
 import { manifest as hardcodedManifest } from "./manifest";
 
 const API = "http://localhost:8000";
 
-type AppMode = "menu" | "loading" | "demo" | "live" | "admin-login" | "admin" | "training-link" | "training-complete" | "create-sim" | "dynamic";
+type AppMode = "menu" | "loading" | "demo" | "live" | "admin-login" | "admin" | "training-link" | "training-complete" | "dashboard" | "create-sim" | "dynamic";
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>("menu");
@@ -71,9 +72,16 @@ export default function App() {
     }
   }
 
-  function handleSimGenerated(data: any) {
-    setDynamicData(data.manifest);
-    setMode("dynamic");
+  async function handleOpenSimulation(workflowId: string) {
+    try {
+      const res = await fetch(`${API}/sim/manifest/${workflowId}`);
+      if (!res.ok) throw new Error("Failed to load manifest");
+      const manifest = await res.json();
+      setDynamicData(manifest);
+      setMode("dynamic");
+    } catch (e: any) {
+      setErr(e.message);
+    }
   }
 
   async function handleTrainingComplete(completionPayload: any) {
@@ -97,7 +105,6 @@ export default function App() {
       <div className="text-center">
         <div className="text-5xl mb-4 animate-spin">🧠</div>
         <p className="text-white text-lg">Loading training...</p>
-        <p className="text-gray-400 text-sm mt-2">Please wait</p>
       </div>
     </div>
   );
@@ -117,16 +124,29 @@ export default function App() {
           Enter Admin Panel
         </button>
         <button onClick={() => setMode("menu")}
-          className="w-full bg-gray-700 text-gray-300 px-6 py-3 rounded-xl font-semibold">
-          Back
-        </button>
+          className="w-full bg-gray-700 text-gray-300 px-6 py-3 rounded-xl font-semibold">Back</button>
       </div>
     </div>
   );
 
   if (mode === "admin") return <AdminPanel adminKey={adminKey} onBack={() => setMode("menu")} />;
-  if (mode === "create-sim") return <AdminForm onGenerated={handleSimGenerated} onBack={() => setMode("menu")} />;
-  if (mode === "dynamic" && dynamicData) return <DynamicSimulator manifest={dynamicData} onBack={() => setMode("menu")} />;
+
+  if (mode === "dashboard") return (
+    <SimDashboard
+      onOpenSimulation={handleOpenSimulation}
+      onCreateNew={() => setMode("create-sim")}
+      onBack={() => setMode("menu")}
+    />
+  );
+
+  if (mode === "create-sim") return (
+    <AdminForm onSubmitted={() => setMode("dashboard")} onBack={() => setMode("dashboard")} />
+  );
+
+  if (mode === "dynamic" && dynamicData) return (
+    <DynamicSimulator manifest={dynamicData} onBack={() => setMode("dashboard")} />
+  );
+
   if (mode === "demo") return <Simulator manifest={hardcodedManifest} onBack={() => setMode("menu")} />;
   if (mode === "live" && liveData) return <Simulator manifest={liveData} onBack={() => setMode("menu")} />;
 
@@ -150,9 +170,6 @@ export default function App() {
           <div className="bg-green-50 rounded-xl p-6 mb-4">
             <p className="text-4xl font-bold text-green-600">{completionData.quiz_score}/{completionData.total_questions}</p>
             <p className="text-sm text-green-700 mt-1">Quiz Score</p>
-            <p className={`text-sm mt-2 font-semibold ${completionData.passed ? "text-green-600" : "text-red-600"}`}>
-              {completionData.passed ? "✅ PASSED" : "❌ FAILED — Please retake"}
-            </p>
           </div>
         )}
         <p className="text-gray-500 text-sm">You can close this window now.</p>
@@ -166,9 +183,9 @@ export default function App() {
         <div className="text-5xl mb-3">🧠</div>
         <h1 className="text-white text-2xl font-bold">Train the Brain</h1>
         <p className="text-gray-400 mt-1 mb-8">Interactive Training Simulator</p>
-        <button onClick={() => setMode("create-sim")}
+        <button onClick={() => setMode("dashboard")}
           className="w-full bg-purple-600 text-white px-6 py-4 rounded-xl font-semibold text-lg mb-3">
-          ✨ Create New Simulation
+          ✨ Simulations Dashboard
         </button>
         <button onClick={() => setMode("demo")}
           className="w-full bg-blue-600 text-white px-6 py-4 rounded-xl font-semibold text-lg mb-3">
@@ -182,7 +199,7 @@ export default function App() {
           className="w-full bg-gray-700 text-white px-6 py-4 rounded-xl font-semibold text-lg mb-3">
           🔐 Admin Panel
         </button>
-        <p className="text-gray-500 text-xs mt-4">Create New = dynamic AI · Demo = pre-built · Live = AI pipeline · Admin = manage</p>
+        <p className="text-gray-500 text-xs mt-4">Dashboard = create & manage simulations · Demo = pre-built · Live = legacy AI</p>
         {err && <div className="mt-4 bg-red-900/50 text-red-300 px-4 py-3 rounded-xl text-sm">{err}</div>}
       </div>
     </div>

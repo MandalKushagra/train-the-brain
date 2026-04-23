@@ -21,6 +21,13 @@ DEFAULT_FILE_PATTERNS = [
     "src/screens/**",
     "src/styles/**",
     "src/theme/**",
+    "frontend/src/components/**",
+    "frontend/src/screens/**",
+    "frontend/src/types/**",
+    "app/src/**/*.kt",
+    "app/src/**/*.java",
+    "**/*Component*",
+    "**/*Screen*",
 ]
 
 # GitHub API base URL
@@ -57,12 +64,15 @@ def _parse_repo_url(repo_url: str) -> tuple[str, str]:
 def _matches_any_pattern(file_path: str, patterns: list[str]) -> bool:
     """Check if a file path matches any of the given glob-style patterns."""
     for pattern in patterns:
-        # Support ** for recursive matching by converting to fnmatch-friendly form
-        regex_pattern = pattern.replace("**", "DOUBLE_STAR").replace("*", "[^/]*").replace("DOUBLE_STAR", ".*")
-        if re.fullmatch(regex_pattern, file_path):
+        # Convert glob to regex: ** = any path, * = any segment
+        regex = pattern.replace(".", "\\.").replace("**", "§§").replace("*", "[^/]*").replace("§§", ".*")
+        if re.fullmatch(regex, file_path):
             return True
-        # Also try fnmatch for simple patterns
+        # Also try simple fnmatch
         if fnmatch.fnmatch(file_path, pattern):
+            return True
+        # Also try if the pattern is a substring match for simple cases
+        if "*" not in pattern and pattern in file_path:
             return True
     return False
 
@@ -87,6 +97,7 @@ class GitHubCodeFetcher:
         self,
         repo_url: str,
         file_patterns: list[str] | None = None,
+        branch: str = "main",
     ) -> CodeContext:
         """Fetch relevant frontend source code from a GitHub repo.
 
@@ -109,15 +120,20 @@ class GitHubCodeFetcher:
 
         try:
             owner, repo = _parse_repo_url(repo_url)
+            print(f"   Parsed repo: {owner}/{repo}")
         except ValueError as exc:
+            print(f"   ❌ Invalid URL: {exc}")
             logger.warning("Invalid GitHub URL '%s': %s", repo_url, exc)
             return self._empty_context(repo_url)
 
         patterns = file_patterns or DEFAULT_FILE_PATTERNS
+        print(f"   Patterns: {patterns}")
 
         try:
-            source_files = await self._fetch_repo_files(owner, repo, patterns)
+            source_files = await self._fetch_repo_files(owner, repo, patterns, branch)
+            print(f"   Fetched {len(source_files)} files")
         except Exception as exc:
+            print(f"   ❌ Fetch failed: {exc}")
             logger.warning(
                 "Failed to fetch repo %s/%s: %s", owner, repo, exc
             )
@@ -153,13 +169,13 @@ class GitHubCodeFetcher:
             fetched_files=[],
         )
 
-    async def _get_client(self) -> httpx.AsyncClient:
-        """Lazily create an httpx async client with auth headers."""
+    def _get_sync_client(self) -> httpx.Client:
+        """Lazily create an httpx sync client with auth headers."""
         if self._client is None or self._client.is_closed:
             headers: dict[str, str] = {"Accept": "application/vnd.github.v3+json"}
             if self._token:
                 headers["Authorization"] = f"Bearer {self._token}"
-            self._client = httpx.AsyncClient(
+            self._client = httpx.Client(
                 base_url=GITHUB_API_BASE,
                 headers=headers,
                 timeout=30.0,
@@ -167,26 +183,42 @@ class GitHubCodeFetcher:
         return self._client
 
     async def _fetch_repo_files(
-        self, owner: str, repo: str, patterns: list[str]
+        self, owner: str, repo: str, patterns: list[str], branch: str = "main"
     ) -> list[dict[str, str]]:
         """Fetch the repo tree, filter by patterns, then download file contents."""
-        client = await self._get_client()
+        client = self._get_sync_client()
 
-        # 1. Get the full recursive tree from the default branch
-        tree_resp = await client.get(
-            f"/repos/{owner}/{repo}/git/trees/HEAD",
+        # 1. Get the full recursive tree from the specified branch
+        print(f"   Fetching tree from {owner}/{repo} (branch: {branch})...")
+        tree_resp = client.get(
+            f"/repos/{owner}/{repo}/git/trees/{branch}",
             params={"recursive": "1"},
         )
+        # Fallback to HEAD if branch not found
+        if tree_resp.status_code == 404:
+            print(f"   Branch '{branch}' not found, trying HEAD...")
+            tree_resp = client.get(
+                f"/repos/{owner}/{repo}/git/trees/HEAD",
+                params={"recursive": "1"},
+            )
         tree_resp.raise_for_status()
         tree_data = tree_resp.json()
+        print(f"   Tree has {len(tree_data.get('tree', []))} entries")
 
         # 2. Filter to blobs matching the requested patterns
         matching_paths: list[str] = []
+        all_blob_paths: list[str] = []
         for item in tree_data.get("tree", []):
             if item.get("type") != "blob":
                 continue
+            all_blob_paths.append(item["path"])
             if _matches_any_pattern(item["path"], patterns):
                 matching_paths.append(item["path"])
+
+        # Debug: show first 15 blob paths so we can see the structure
+        print(f"   Total blobs: {len(all_blob_paths)}")
+        print(f"   Sample paths: {all_blob_paths[:15]}")
+        print(f"   Matched: {len(matching_paths)}")
 
         if not matching_paths:
             logger.info("No files matched patterns %s in %s/%s", patterns, owner, repo)
@@ -203,7 +235,7 @@ class GitHubCodeFetcher:
                 )
                 break
             try:
-                content = await self._fetch_file_content(client, owner, repo, path)
+                content = self._fetch_file_content(client, owner, repo, path)
                 total_bytes += len(content.encode("utf-8"))
                 source_files.append({"path": path, "content": content})
             except Exception as exc:
@@ -211,11 +243,11 @@ class GitHubCodeFetcher:
 
         return source_files
 
-    async def _fetch_file_content(
-        self, client: httpx.AsyncClient, owner: str, repo: str, path: str
+    def _fetch_file_content(
+        self, client: httpx.Client, owner: str, repo: str, path: str
     ) -> str:
         """Download a single file's raw content from GitHub."""
-        resp = await client.get(
+        resp = client.get(
             f"/repos/{owner}/{repo}/contents/{path}",
             headers={"Accept": "application/vnd.github.v3.raw"},
         )
@@ -301,4 +333,4 @@ class GitHubCodeFetcher:
     async def close(self) -> None:
         """Close the underlying HTTP client."""
         if self._client and not self._client.is_closed:
-            await self._client.aclose()
+            self._client.close()
