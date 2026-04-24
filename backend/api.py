@@ -1,19 +1,61 @@
 """FastAPI backend — serves the pipeline via HTTP.
 Run: uvicorn api:app --reload --port 8000
 
-Test with curl:
-  curl -X POST http://localhost:8000/generate \
-    -H "Content-Type: application/json" \
-    -d '{"prd_text": "...", "code_text": "...", "workflow_name": "FTG Flow"}'
+Endpoints:
+  Legacy:
+    POST /generate          — mock pipeline (kept for backward compat)
+    GET  /manifest/{id}     — mock manifest
+    GET  /assessment/{id}   — mock assessment
+
+  New (real pipeline + S3 + background jobs):
+    POST /pipeline/start          — upload artifacts, kick off pipeline
+    GET  /pipeline/{job_id}       — poll job status
+    GET  /pipeline/{job_id}/result — fetch completed output
+    GET  /pipeline/jobs/           — list all jobs
+
+Test the new pipeline with curl:
+  curl -X POST http://localhost:8000/pipeline/start \
+    -F 'workflow_name=FTG Flow' \
+    -F 'prd_text=...' \
+    -F 'code_text=...'
 """
 import os
 import json
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
 
-app = FastAPI(title="Train the Brain API", version="0.1.0")
+from services import db_service
+from pipeline_api import router as pipeline_router
+from training_api import router as training_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize DB on startup."""
+    db_service.init_db()
+    yield
+
+
+app = FastAPI(title="Train the Brain API", version="0.2.0", lifespan=lifespan)
+
+# CORS — allow the React frontend to call us
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount the new pipeline router
+app.include_router(pipeline_router)
+
+# Mount the training assignment + tracking router
+app.include_router(training_router)
 
 # --- Request/Response models ---
 
